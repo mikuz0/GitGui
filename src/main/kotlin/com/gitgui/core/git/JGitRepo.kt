@@ -3,7 +3,6 @@ package com.gitgui.core.git
 import com.gitgui.core.models.*
 import org.eclipse.jgit.api.Git
 import org.eclipse.jgit.lib.*
-import org.eclipse.jgit.revwalk.RevWalk
 import org.eclipse.jgit.storage.file.FileRepositoryBuilder
 import java.io.File
 
@@ -65,17 +64,18 @@ class JGitRepo(private val repoPath: String) {
             FileStatus(it, FileStatusType.MODIFIED, isStaged = false)
         }
 
-        // Удалённые файлы (removed — из индекса, missing — с диска)
-        val deleted = status.removed.map {
-            FileStatus(it, FileStatusType.DELETED, isStaged = false)
-        } + status.missing.map {
+        // Исправление 4: missing — удалённые с диска, но не в индексе (unstaged deletion)
+        // removed — удалённые из индекса (staged deletion) — кладём в staged
+        val deleted = status.missing.map {
             FileStatus(it, FileStatusType.DELETED, isStaged = false)
         }
 
-        // Проиндексированные файлы
+        // Проиндексированные файлы: added, changed и removed (staged deletion)
         val staged = status.added.map {
             FileStatus(it, FileStatusType.STAGED, isStaged = true)
         } + status.changed.map {
+            FileStatus(it, FileStatusType.STAGED, isStaged = true)
+        } + status.removed.map {
             FileStatus(it, FileStatusType.STAGED, isStaged = true)
         }
 
@@ -102,8 +102,11 @@ class JGitRepo(private val repoPath: String) {
     fun stageFile(path: String) {
         val file = File(repoPath, path)
         if (!file.exists()) {
-            // Файла нет на диске — удаляем из индекса
-            deleteFromIndex(path)
+            // Исправление 3: проверяем наличие файла в индексе перед rm --cached
+            val dirCache = repository.readDirCache()
+            if (dirCache.getEntry(path) != null) {
+                deleteFromIndex(path)
+            }
             return
         }
         git.add().addFilepattern(path).call()
@@ -117,34 +120,39 @@ class JGitRepo(private val repoPath: String) {
 
     /**
      * Создаёт коммит с заданным сообщением.
-     * @return полный SHA коммита или null если нет изменений для коммита
+     * @return полный SHA коммита или null если нет staged-изменений
      */
     fun commit(message: String): String? {
-        // Проверяем, есть ли изменения для коммита
+        // Исправление 5: проверяем staged-изменения, а не hasUncommittedChanges()
         val status = git.status().call()
-        val hasChanges = status.hasUncommittedChanges()
-        if (!hasChanges) return null
-        
+        val hasStaged = status.added.isNotEmpty()
+            || status.changed.isNotEmpty()
+            || status.removed.isNotEmpty()
+        if (!hasStaged) return null
+
         return try {
             val result = git.commit().setMessage(message).call()
             result.name // полный SHA
         } catch (_: Exception) {
-            null // нет изменений для коммита
+            null
         }
     }
 
-    /** Удаляет файл из рабочей директории и из индекса */
+    /**
+     * Удаляет файл из рабочей директории и из индекса.
+     * setCached(false) уже удаляет файл с диска, дополнительного delete() не нужно.
+     */
     fun deleteFile(path: String) {
         git.rm().setCached(false).addFilepattern(path).call()
-        File(repoPath, path).delete()
     }
 
     /**
      * Удаляет файл только из индекса (без удаления с диска).
-     * Используется для stage файла, которого нет на диске.
+     * Аналог git rm --cached.
      */
     fun deleteFromIndex(path: String) {
-        git.rm().setCached(false).addFilepattern(path).call()
+        // Исправление 1: setCached(true) — только удалить из индекса, не трогая диск
+        git.rm().setCached(true).addFilepattern(path).call()
     }
 
     /**
@@ -153,26 +161,16 @@ class JGitRepo(private val repoPath: String) {
      * @return список CommitInfo
      */
     fun getHistory(limit: Int = 50): List<CommitInfo> {
-        val commits = mutableListOf<CommitInfo>()
-        val log = git.log().call()
-        RevWalk(repository).use { walk ->
-            var count = 0
-            for (commit in log) {
-                if (count >= limit) break
-                val authorIdent = commit.authorIdent
-                val commitTime = commit.commitTime
-                val dateStr = commitTime.toString()
-                commits.add(CommitInfo(
-                    shortSha = commit.name.substring(0, 7),
-                    fullSha = commit.name,
-                    author = authorIdent.name,
-                    date = dateStr,
-                    message = commit.shortMessage.trim()
-                ))
-                count++
-            }
+        // Исправление 6: setMaxCount для ограничения, убираем лишний RevWalk
+        return git.log().setMaxCount(limit).call().map { commit ->
+            CommitInfo(
+                shortSha = commit.name.substring(0, 7),
+                fullSha = commit.name,
+                author = commit.authorIdent.name,
+                date = commit.commitTime.toString(),
+                message = commit.shortMessage.trim()
+            )
         }
-        return commits
     }
 
     /** Закрывает репозиторий и освобождает ресурсы */

@@ -1,6 +1,7 @@
 package com.gitgui.ui
 
 import com.gitgui.core.config.Config
+import com.gitgui.core.config.RecentProject
 import com.gitgui.core.git.GitRepo
 import com.gitgui.core.models.*
 import com.gitgui.ui.dialogs.CloneDialog
@@ -20,9 +21,11 @@ import javafx.scene.layout.*
 import javafx.stage.DirectoryChooser
 import javafx.stage.Stage
 import java.io.File
+import java.nio.file.Files
+import java.nio.file.Paths
 
 /**
- * Главное окно приложения.
+ * Главное окно приложения с MenuBar.
  */
 class MainWindow : Application() {
 
@@ -33,29 +36,38 @@ class MainWindow : Application() {
     private lateinit var fileListLeft: FileListWidget
     private lateinit var fileListRight: FileListWidget
     private lateinit var commitArea: CommitAreaWidget
+    private lateinit var infoRepoLabel: Label
     private lateinit var infoBranchLabel: Label
-    private lateinit var infoRemoteLabel: Label
-    private lateinit var pushButton: Button
-    private lateinit var pullButton: Button
+    private lateinit var infoRemotesLabel: Label
+
+    private lateinit var pushMenuItem: MenuItem
+    private lateinit var pullMenuItem: MenuItem
+    private lateinit var recentMenu: Menu
 
     private val unstagedFiles: ObservableList<FileStatus> = FXCollections.observableArrayList()
     private val stagedFiles: ObservableList<FileStatus> = FXCollections.observableArrayList()
 
-    // Исправление 8: start() только создаёт базовый UI, всё остальное — в buildRepoContent()
     override fun start(stage: Stage) {
         currentStage = stage
         stage.title = "Git GUI"
+        stage.width = 1000.0
+        stage.height = 700.0
 
         statusLabel = Label("Готов")
         statusLabel.style = "-fx-padding: 5; -fx-background-color: #f0f0f0;"
 
         val root = BorderPane()
-        root.top = buildToolbar()
+        root.top = buildMenuBar()
         root.center = buildEmptyContent()
         root.bottom = statusLabel
 
         stage.scene = Scene(root, 1000.0, 700.0)
         stage.show()
+
+        // Обработка закрытия окна
+        stage.setOnCloseRequest {
+            gitRepo?.close()
+        }
 
         // Автозагрузка последнего репозитория
         val config = Config.load()
@@ -63,6 +75,131 @@ class MainWindow : Application() {
         if (lastRepo != null && File(lastRepo).exists()) {
             openRepo(lastRepo)
         }
+    }
+
+    private fun buildMenuBar(): MenuBar {
+        // ===== File Menu =====
+        val fileMenu = Menu("_File")
+
+        val openButton = MenuItem("_Open Repository...")
+        openButton.accelerator = getKeyCombination("CONTROL O")
+        openButton.setOnAction { openRepositoryDialog() }
+
+        val cloneButton = MenuItem("Cl_one Repository...")
+        cloneButton.accelerator = getKeyCombination("CONTROL K")
+        cloneButton.setOnAction { CloneDialog { path -> openRepo(path) }.show() }
+
+        val closeAction = MenuItem("C_lose")
+        closeAction.accelerator = getKeyCombination("CONTROL W")
+        closeAction.setOnAction {
+            gitRepo?.close()
+            gitRepo = null
+            currentRepoPath = null
+            unstagedFiles.clear()
+            stagedFiles.clear()
+            val root = currentStage.scene.root as BorderPane
+            root.center = buildEmptyContent()
+            statusLabel.text = "Готов"
+        }
+
+        val exitAction = MenuItem("E_xit")
+        exitAction.accelerator = getKeyCombination("CONTROL Q")
+        exitAction.setOnAction { currentStage.close() }
+
+        recentMenu = Menu("_Recent Projects")
+        rebuildRecentMenu()
+
+        fileMenu.items.addAll(
+            openButton,
+            cloneButton,
+            SeparatorMenuItem(),
+            recentMenu,
+            SeparatorMenuItem(),
+            closeAction,
+            exitAction
+        )
+
+        // ===== Git Menu =====
+        val gitMenu = Menu("_Git")
+
+        val refreshAction = MenuItem("_Refresh")
+        refreshAction.accelerator = getKeyCombination("CONTROL R")
+        refreshAction.setOnAction { refreshStatus() }
+
+        val stageAllAction = MenuItem("Stage _All")
+        stageAllAction.setOnAction { stageAll() }
+
+        val commitAction = MenuItem("_Commit...")
+        commitAction.accelerator = getKeyCombination("CONTROL S")
+        commitAction.setOnAction { performCommit() }
+
+        pushMenuItem = MenuItem("_Push")
+        pushMenuItem.setDisable(true)
+        pushMenuItem.setOnAction { performPush() }
+
+        pullMenuItem = MenuItem("_Pull")
+        pullMenuItem.setDisable(true)
+        pullMenuItem.setOnAction { performPull() }
+
+        val fetchAction = MenuItem("_Fetch")
+        fetchAction.setOnAction { performFetch() }
+
+        gitMenu.items.addAll(
+            refreshAction,
+            stageAllAction,
+            commitAction,
+            SeparatorMenuItem(),
+            pushMenuItem,
+            pullMenuItem,
+            fetchAction
+        )
+
+        // ===== Help Menu =====
+        val helpMenu = Menu("_Help")
+
+        val aboutAction = MenuItem("_About")
+        aboutAction.setOnAction { showAbout() }
+
+        helpMenu.items.add(aboutAction)
+
+        // ===== MenuBar =====
+        val menuBar = MenuBar()
+        menuBar.menus.addAll(fileMenu, gitMenu, helpMenu)
+        // MenuBar handles shortcuts via accelerators
+
+        return menuBar
+    }
+
+    private fun rebuildRecentMenu() {
+        recentMenu.items.clear()
+
+        val config = Config.load()
+        val validProjects = config.recentProjects
+            .filter { Files.exists(Paths.get(it.path)) }
+
+        if (validProjects.isEmpty()) {
+            val emptyItem = MenuItem("(нет недавних проектов)")
+            emptyItem.isDisable = true
+            recentMenu.items.add(emptyItem)
+            return
+        }
+
+        validProjects.forEach { project ->
+            val menuItem = MenuItem(formatRecentProject(project))
+            menuItem.setOnAction {
+                openRepo(project.path)
+            }
+            recentMenu.items.add(menuItem)
+        }
+    }
+
+    private fun formatRecentProject(project: RecentProject): String {
+        val fileName = File(project.path).name
+        return "$fileName  —  ${project.path}"
+    }
+
+    private fun getKeyCombination(text: String): javafx.scene.input.KeyCombination {
+        return javafx.scene.input.KeyCombination.valueOf(text)
     }
 
     private fun buildToolbar(): Region {
@@ -81,25 +218,17 @@ class MainWindow : Application() {
         return toolbar
     }
 
-    // Исправление 3: пересоздаём виджеты в buildRepoContent(), чтобы избежать duplicate children
     private fun buildRepoContent(): Region {
         val infoBox = LabelFrame("Информация")
-        infoRemoteLabel = Label("Репозиторий: | Удаленные: ")
+        infoRepoLabel = Label("Репозиторий: ")
         infoBranchLabel = Label("Ветка: ")
+        infoRemotesLabel = Label("Удаленные: ")
 
-        pushButton = Button("📤 Push")
-        pushButton.isDisable = true
-        pushButton.setOnAction { performPush() }
+        val infoVBox = VBox(5.0, infoRepoLabel, infoBranchLabel, infoRemotesLabel)
+        infoVBox.alignment = Pos.CENTER_LEFT
+        infoBox.root.children.add(infoVBox)
 
-        pullButton = Button("📥 Pull")
-        pullButton.isDisable = true
-        pullButton.setOnAction { performPull() }
-
-        val infoHBox = HBox(10.0, infoRemoteLabel, infoBranchLabel, pushButton, pullButton)
-        infoHBox.alignment = Pos.CENTER_LEFT
-        infoBox.root.children.add(infoHBox)
-
-        // Исправление 2: создаём виджеты с FileListMode
+        // Создаём виджеты с FileListMode
         fileListLeft = FileListWidget("Изменённые файлы", unstagedFiles, FileListMode.CHANGED)
         fileListRight = FileListWidget("Проиндексировано (staged)", stagedFiles, FileListMode.STAGED)
 
@@ -161,12 +290,14 @@ class MainWindow : Application() {
         val updatedConfig = Config.addRecentProject(config, path)
         Config.save(updatedConfig.copy(lastRepository = path))
 
+        // Rebuild recent projects menu
+        rebuildRecentMenu()
+
         val root = currentStage.scene.root as BorderPane
         root.center = buildRepoContent()
         refreshStatus()
     }
 
-    // Исправление 7: try/catch вокруг repo.refreshStatus()
     private fun refreshStatus() {
         val repo = gitRepo ?: return
         val status = try {
@@ -178,10 +309,10 @@ class MainWindow : Application() {
 
         val remotes = repo.getRemotes()
         val remoteText = if (remotes.isEmpty()) "нет" else remotes.joinToString(", ")
-        infoRemoteLabel.text = "Репозиторий: ${status.repoPath} | Удаленные: $remoteText"
 
-        val branchText = status.currentBranch ?: "(detached HEAD)"
-        infoBranchLabel.text = "Текущая ветка: $branchText"
+        infoRepoLabel.text = "Репозиторий: ${status.repoPath}"
+        infoBranchLabel.text = "Ветка: ${status.currentBranch ?: "(detached HEAD)"}"
+        infoRemotesLabel.text = "Удаленные: $remoteText"
 
         unstagedFiles.clear()
         unstagedFiles.addAll(
@@ -191,8 +322,10 @@ class MainWindow : Application() {
         stagedFiles.addAll(status.stagedFiles)
 
         updateStatusBar(status)
-        pushButton.isDisable = remotes.isEmpty()
-        pullButton.isDisable = remotes.isEmpty()
+
+        // Enable/disable push/pull based on remotes
+        pushMenuItem.isDisable = remotes.isEmpty()
+        pullMenuItem.isDisable = remotes.isEmpty()
     }
 
     private fun updateStatusBar(status: RepoStatus) {
@@ -207,7 +340,6 @@ class MainWindow : Application() {
         }
     }
 
-    // Исправление 4: stage/unstage методы
     private fun stageSelected() {
         val repo = gitRepo ?: return
         val selected = fileListLeft.listView.selectionModel.selectedItems
@@ -265,7 +397,6 @@ class MainWindow : Application() {
         }
     }
 
-    // Исправление 5: performCommit через Task
     private fun performCommit() {
         val repo = gitRepo ?: return
         val message = commitArea.messageArea.text.trim()
@@ -293,7 +424,6 @@ class MainWindow : Application() {
         Thread(task).apply { isDaemon = true }.start()
     }
 
-    // Исправление 5: performPush через Task
     private fun performPush() {
         val repo = gitRepo ?: return
 
@@ -314,7 +444,6 @@ class MainWindow : Application() {
         Thread(task).apply { isDaemon = true }.start()
     }
 
-    // Исправление 5: performPull через Task
     private fun performPull() {
         val repo = gitRepo ?: return
 
@@ -334,6 +463,45 @@ class MainWindow : Application() {
             statusLabel.text = "❌ Pull failed: ${task.exception?.message}"
         }
         Thread(task).apply { isDaemon = true }.start()
+    }
+
+    private fun performFetch() {
+        val repo = gitRepo ?: return
+        val remotes = repo.getRemotes()
+        if (remotes.isEmpty()) {
+            statusLabel.text = "⚠️ Нет удалённых репозиториев"
+            return
+        }
+
+        val task = object : javafx.concurrent.Task<com.gitgui.core.git.SystemGit.ProcessResult>() {
+            override fun call() = repo.fetch(remotes[0])
+        }
+        task.setOnSucceeded {
+            val result = task.value
+            if (result.exitCode == 0) {
+                statusLabel.text = "✅ Fetch выполнен успешно"
+            } else {
+                statusLabel.text = "❌ Fetch failed: ${result.stderr}"
+            }
+        }
+        task.setOnFailed {
+            statusLabel.text = "❌ Fetch failed: ${task.exception?.message}"
+        }
+        Thread(task).apply { isDaemon = true }.start()
+    }
+
+    private fun showAbout() {
+        val alert = Alert(Alert.AlertType.INFORMATION)
+        alert.title = "О программе Git GUI"
+        alert.headerText = "Git GUI v1.0.0"
+        alert.contentText = "Десктопное приложение для работы с Git.\n\n" +
+                "Ключевые возможности:\n" +
+                "• Визуальный просмотр изменений\n" +
+                "• Управление индексом\n" +
+                "• История коммитов\n" +
+                "• Push/Pull/Fetch через системный git\n" +
+                "• Недавние проекты"
+        alert.showAndWait()
     }
 }
 

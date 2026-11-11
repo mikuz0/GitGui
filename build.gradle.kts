@@ -1,5 +1,4 @@
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
-import org.gradle.api.tasks.JavaExec
 
 plugins {
     kotlin("jvm") version "2.1.20"
@@ -51,44 +50,4 @@ kotlin {
 
 application {
     mainClass.set("com.gitgui.ui.App")
-}
-
-// Добавляем JavaFX modules в run task
-tasks.withType<JavaExec> {
-    doFirst {
-        val javafxModules = configurations.runtimeClasspath.get().filter { it.name.contains("javafx") }.map { it.absolutePath }.joinToString(":")
-        jvmArgs(
-            "--module-path", javafxModules,
-            "--add-modules", "javafx.controls,javafx.fxml,javafx.graphics"
-        )
-    }
-}
-
-// Задача для сборки .deb через jpackage
-val jpackageDeb = tasks.register<JavaExec>("jpackageDeb") {
-    dependsOn("jar")
-    val jpackageHome = providers.exec {
-        commandLine("readlink", "-f", System.getProperty("java.home"))
-    }.standardOutput.asText.get().trim()
-
-    val mainJar = tasks.jar.get().archiveFile.get().asFile.name
-    val jarDir = tasks.jar.get().archiveFile.get().asFile.parent
-
-    doLast {
-        val jpackagePath = "$jpackageHome/bin/jpackage"
-        val destDir = layout.buildDirectory.get().asFile.path + "/packages"
-        exec {
-            commandLine(
-                jpackagePath, "app-image",
-                "--name", project.property("app.packageName").toString(),
-                "--version", project.property("app.version").toString(),
-                "--input", jarDir,
-                "--main-jar", mainJar,
-                "--main-class", "com.gitgui.AppKt",
-                "--type", "deb",
-                "--dest", destDir,
-                "--vendor", project.property("app.maintainer").toString()
-            )
-        }
-    }
 }
