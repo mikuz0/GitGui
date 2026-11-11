@@ -50,7 +50,7 @@ kotlin {
 }
 
 application {
-    mainClass.set("com.gitgui.AppKt")
+    mainClass.set("com.gitgui.ui.App")
 }
 
 // Добавляем JavaFX modules в run task
