@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# ─── JDK 21 явно ─────────────────────────────────────────────────
+export JAVA_HOME="${JAVA_HOME:-/usr/lib/jvm/java-21-openjdk-amd64}"
+export PATH="$JAVA_HOME/bin:$PATH"
+
 # ─── Конфигурация ─────────────────────────────────────────────────
 APP_NAME="git-gui"
 APP_VERSION="1.0.0"
@@ -22,9 +26,13 @@ fi
 echo "Application directory: $APPDIR"
 
 # ─── Шаг 3: Найти main jar ───────────────────────────────────────
-MAIN_JAR=$(ls "$APPDIR/lib"/*.jar 2>/dev/null | head -n 1)
-if [ -z "$MAIN_JAR" ]; then
-    echo "ERROR: No jar found in $APPDIR/lib"
+# Gradle application plugin называет jar по rootProject.name (без версии),
+# т.к. version в build.gradle.kts не задан. Поэтому — git-gui.jar.
+MAIN_JAR="$APPDIR/lib/git-gui.jar"
+if [ ! -f "$MAIN_JAR" ]; then
+    echo "ERROR: Main jar not found: $MAIN_JAR"
+    echo "Available jars:"
+    ls -la "$APPDIR/lib/"
     exit 1
 fi
 echo "Main jar: $MAIN_JAR"
@@ -35,6 +43,10 @@ mkdir -p "$DEST_DIR"
 rm -f "$DEST_DIR"/*.deb
 
 # ─── Шаг 5: jpackage ─────────────────────────────────────────────
+# --runtime-image "$JAVA_HOME" — заставляет jpackage использовать готовый
+# runtime-образ вместо вызова jlink (который падает на Ubuntu JDK 21 с JEP 493).
+# \$APPDIR в --java-options — runtime-переменная launcher'а jpackage,
+# а не путь сборки; /lib — директория с JavaFX-модулями внутри пакета.
 echo "=== Building .deb with jpackage ==="
 jpackage \
     --type deb \
@@ -43,7 +55,6 @@ jpackage \
     --input "$APPDIR/lib" \
     --main-jar "$(basename "$MAIN_JAR")" \
     --main-class "$MAIN_CLASS" \
-    --java-options "--module-path $APPDIR --add-modules javafx.controls,javafx.fxml,javafx.graphics" \
     --linux-shortcut \
     --linux-menu-group "Development" \
     --dest "$DEST_DIR"
