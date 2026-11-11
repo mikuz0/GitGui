@@ -6,6 +6,7 @@ import com.gitgui.core.models.*
 import com.gitgui.ui.dialogs.CloneDialog
 import com.gitgui.ui.dialogs.HistoryDialog
 import com.gitgui.ui.widgets.CommitAreaWidget
+import com.gitgui.ui.widgets.FileListMode
 import com.gitgui.ui.widgets.FileListWidget
 import com.gitgui.ui.widgets.RecentProjectsPane
 import javafx.application.Application
@@ -16,7 +17,7 @@ import javafx.geometry.Pos
 import javafx.scene.Scene
 import javafx.scene.control.*
 import javafx.scene.layout.*
-import javafx.stage.FileChooser
+import javafx.stage.DirectoryChooser
 import javafx.stage.Stage
 import java.io.File
 
@@ -40,6 +41,7 @@ class MainWindow : Application() {
     private val unstagedFiles: ObservableList<FileStatus> = FXCollections.observableArrayList()
     private val stagedFiles: ObservableList<FileStatus> = FXCollections.observableArrayList()
 
+    // Исправление 8: start() только создаёт базовый UI, всё остальное — в buildRepoContent()
     override fun start(stage: Stage) {
         currentStage = stage
         stage.title = "Git GUI"
@@ -47,27 +49,20 @@ class MainWindow : Application() {
         statusLabel = Label("Готов")
         statusLabel.style = "-fx-padding: 5; -fx-background-color: #f0f0f0;"
 
-        fileListLeft = FileListWidget("Изменённые файлы", unstagedFiles)
-        fileListRight = FileListWidget("Проиндексировано (staged)", stagedFiles)
-        commitArea = CommitAreaWidget()
-
-        val config = Config.load()
-        val lastRepo = config.lastRepository
-
-        val centerContent = if (lastRepo != null && File(lastRepo).exists()) {
-            openRepo(stage, lastRepo)
-            buildRepoContent()
-        } else {
-            buildEmptyContent()
-        }
-
         val root = BorderPane()
         root.top = buildToolbar()
-        root.center = centerContent
+        root.center = buildEmptyContent()
         root.bottom = statusLabel
 
         stage.scene = Scene(root, 1000.0, 700.0)
         stage.show()
+
+        // Автозагрузка последнего репозитория
+        val config = Config.load()
+        val lastRepo = config.lastRepository
+        if (lastRepo != null && File(lastRepo).exists()) {
+            openRepo(lastRepo)
+        }
     }
 
     private fun buildToolbar(): Region {
@@ -75,7 +70,7 @@ class MainWindow : Application() {
         openButton.setOnAction { openRepositoryDialog() }
 
         val cloneButton = Button("📥 Клонировать")
-        cloneButton.setOnAction { CloneDialog { path -> openRepo(currentStage, path) }.show() }
+        cloneButton.setOnAction { CloneDialog { path -> openRepo(path) }.show() }
 
         val refreshButton = Button("🔄 Обновить")
         refreshButton.setOnAction { refreshStatus() }
@@ -86,64 +81,79 @@ class MainWindow : Application() {
         return toolbar
     }
 
+    // Исправление 3: пересоздаём виджеты в buildRepoContent(), чтобы избежать duplicate children
     private fun buildRepoContent(): Region {
         val infoBox = LabelFrame("Информация")
         infoRemoteLabel = Label("Репозиторий: | Удаленные: ")
         infoBranchLabel = Label("Ветка: ")
-        
+
         pushButton = Button("📤 Push")
         pushButton.isDisable = true
         pushButton.setOnAction { performPush() }
-        
+
         pullButton = Button("📥 Pull")
         pullButton.isDisable = true
         pullButton.setOnAction { performPull() }
 
         val infoHBox = HBox(10.0, infoRemoteLabel, infoBranchLabel, pushButton, pullButton)
         infoHBox.alignment = Pos.CENTER_LEFT
-        infoBox.root.children.addAll(infoRemoteLabel, infoHBox)
+        infoBox.root.children.add(infoHBox)
+
+        // Исправление 2: создаём виджеты с FileListMode
+        fileListLeft = FileListWidget("Изменённые файлы", unstagedFiles, FileListMode.CHANGED)
+        fileListRight = FileListWidget("Проиндексировано (staged)", stagedFiles, FileListMode.STAGED)
+
+        // Привязываем обработчики к кнопкам
+        fileListLeft.stageButton.setOnAction { stageSelected() }
+        fileListLeft.stageAllButton.setOnAction { stageAll() }
+        fileListRight.unstageButton.setOnAction { unstageSelected() }
 
         val centerHBox = HBox(10.0, fileListLeft.root, fileListRight.root)
         HBox.setMargin(centerHBox, Insets(10.0))
 
-        val commitBox = LabelFrame("Сообщение коммита")
-        commitArea.root.children.add(commitArea.messageArea)
-        val buttonBox = HBox(10.0, commitArea.commitButton, commitArea.historyButton)
-        buttonBox.alignment = Pos.CENTER_LEFT
-        commitBox.root.children.add(buttonBox)
+        // Пересоздаём commitArea, чтобы избежать duplicate children
+        commitArea = CommitAreaWidget()
+        commitArea.commitButton.setOnAction { performCommit() }
+        commitArea.historyButton.setOnAction { showHistory() }
 
-        val vbox = VBox(10.0, infoBox.root, centerHBox, commitBox.root)
-        return vbox
+        val commitBox = LabelFrame("Сообщение коммита")
+        commitBox.root.children.add(commitArea.root)
+
+        return VBox(10.0, infoBox.root, centerHBox, commitBox.root)
     }
 
     private fun buildEmptyContent(): Region {
-        val recentProjectsPane = RecentProjectsPane()
+        val recentProjectsPane = RecentProjectsPane { path -> openRepo(path) }
         val vbox = VBox(10.0, recentProjectsPane.root)
         vbox.alignment = Pos.TOP_CENTER
         return vbox
     }
 
     private fun openRepositoryDialog() {
-        val fileChooser = FileChooser()
-        fileChooser.title = "Открыть репозиторий"
-        val startDir = getStartDirectory()
-        fileChooser.initialDirectory = startDir
+        val chooser = DirectoryChooser()
+        chooser.title = "Открыть репозиторий"
+        chooser.initialDirectory = getStartDirectory()
 
-        val file = fileChooser.showOpenDialog(currentStage)
-        if (file != null) {
-            openRepo(currentStage, file.absolutePath)
-        }
+        val dir = chooser.showDialog(currentStage) ?: return
+        openRepo(dir.absolutePath)
     }
 
     private fun getStartDirectory(): File {
-        return when {
-            currentRepoPath != null -> File(currentRepoPath!!).parent as File
-            else -> File(System.getProperty("user.home"))
+        currentRepoPath?.let { path ->
+            File(path).parentFile?.let { return it }
         }
+        val config = Config.load()
+        config.recentProjects.firstOrNull()?.let { recent ->
+            File(recent.path).parentFile?.let { return it }
+        }
+        return File(System.getProperty("user.home"))
     }
 
-    private fun openRepo(stage: Stage, path: String) {
-        gitRepo?.close()
+    private fun openRepo(path: String) {
+        try {
+            gitRepo?.close()
+        } catch (_: Exception) { }
+
         gitRepo = GitRepo(path)
         currentRepoPath = path
 
@@ -151,18 +161,25 @@ class MainWindow : Application() {
         val updatedConfig = Config.addRecentProject(config, path)
         Config.save(updatedConfig.copy(lastRepository = path))
 
-        stage.scene.root = buildRepoContent()
+        val root = currentStage.scene.root as BorderPane
+        root.center = buildRepoContent()
         refreshStatus()
     }
 
+    // Исправление 7: try/catch вокруг repo.refreshStatus()
     private fun refreshStatus() {
         val repo = gitRepo ?: return
-        val status = repo.refreshStatus()
+        val status = try {
+            repo.refreshStatus()
+        } catch (e: Exception) {
+            statusLabel.text = "❌ Ошибка чтения статуса: ${e.message}"
+            return
+        }
 
         val remotes = repo.getRemotes()
         val remoteText = if (remotes.isEmpty()) "нет" else remotes.joinToString(", ")
         infoRemoteLabel.text = "Репозиторий: ${status.repoPath} | Удаленные: $remoteText"
-        
+
         val branchText = status.currentBranch ?: "(detached HEAD)"
         infoBranchLabel.text = "Текущая ветка: $branchText"
 
@@ -190,37 +207,122 @@ class MainWindow : Application() {
         }
     }
 
+    // Исправление 4: stage/unstage методы
+    private fun stageSelected() {
+        val repo = gitRepo ?: return
+        val selected = fileListLeft.listView.selectionModel.selectedItems
+        if (selected.isEmpty()) {
+            statusLabel.text = "⚠️ Выберите файлы для добавления"
+            return
+        }
+        try {
+            selected.forEach { repo.stageFile(it.path) }
+            refreshStatus()
+            statusLabel.text = "✅ Добавлено в индекс: ${selected.size}"
+        } catch (e: Exception) {
+            statusLabel.text = "❌ Ошибка stage: ${e.message}"
+        }
+    }
+
+    private fun stageAll() {
+        val repo = gitRepo ?: return
+        val all = fileListLeft.files.toList()
+        if (all.isEmpty()) return
+        try {
+            all.forEach { repo.stageFile(it.path) }
+            refreshStatus()
+            statusLabel.text = "✅ Все файлы добавлены в индекс"
+        } catch (e: Exception) {
+            statusLabel.text = "❌ Ошибка stage all: ${e.message}"
+        }
+    }
+
+    private fun unstageSelected() {
+        val repo = gitRepo ?: return
+        val selected = fileListRight.listView.selectionModel.selectedItems
+        if (selected.isEmpty()) {
+            statusLabel.text = "⚠️ Выберите файлы для отмены индексации"
+            return
+        }
+        try {
+            selected.forEach { repo.unstageFile(it.path) }
+            refreshStatus()
+            statusLabel.text = "✅ Убрано из индекса: ${selected.size}"
+        } catch (e: Exception) {
+            statusLabel.text = "❌ Ошибка unstage: ${e.message}"
+        }
+    }
+
+    private fun showHistory() {
+        val repo = gitRepo ?: return
+        try {
+            val commits = repo.getHistory()
+            HistoryDialog(commits).apply {
+                initOwner(currentStage)
+            }.show()
+        } catch (e: Exception) {
+            statusLabel.text = "❌ Ошибка истории: ${e.message}"
+        }
+    }
+
+    // Исправление 5: performCommit через Task
     private fun performCommit() {
+        val repo = gitRepo ?: return
         val message = commitArea.messageArea.text.trim()
         if (message.isEmpty()) {
             statusLabel.text = "⚠️ Сообщение коммита не может быть пустым"
             return
         }
 
-        val sha = gitRepo?.commit(message)
-        if (sha != null) {
-            commitArea.messageArea.text = ""
-            refreshStatus()
-            statusLabel.text = "✅ Коммит создан: $sha"
-        } else {
-            statusLabel.text = "⚠️ Нет изменений для коммита"
+        val task = object : javafx.concurrent.Task<String?>() {
+            override fun call(): String? = repo.commit(message)
         }
+        task.setOnSucceeded {
+            val sha = task.value
+            if (sha != null) {
+                commitArea.messageArea.text = ""
+                refreshStatus()
+                statusLabel.text = "✅ Коммит создан: ${sha.take(7)}"
+            } else {
+                statusLabel.text = "⚠️ Нет изменений для коммита"
+            }
+        }
+        task.setOnFailed {
+            statusLabel.text = "❌ Ошибка коммита: ${task.exception?.message}"
+        }
+        Thread(task).apply { isDaemon = true }.start()
     }
 
+    // Исправление 5: performPush через Task
     private fun performPush() {
-        val result = gitRepo?.push()
-        if (result != null) {
+        val repo = gitRepo ?: return
+
+        val task = object : javafx.concurrent.Task<com.gitgui.core.git.SystemGit.ProcessResult>() {
+            override fun call() = repo.push()
+        }
+        task.setOnSucceeded {
+            val result = task.value
             if (result.exitCode == 0) {
                 statusLabel.text = "✅ Push выполнен успешно"
             } else {
                 statusLabel.text = "❌ Push failed: ${result.stderr}"
             }
         }
+        task.setOnFailed {
+            statusLabel.text = "❌ Push failed: ${task.exception?.message}"
+        }
+        Thread(task).apply { isDaemon = true }.start()
     }
 
+    // Исправление 5: performPull через Task
     private fun performPull() {
-        val result = gitRepo?.pull()
-        if (result != null) {
+        val repo = gitRepo ?: return
+
+        val task = object : javafx.concurrent.Task<com.gitgui.core.git.SystemGit.ProcessResult>() {
+            override fun call() = repo.pull()
+        }
+        task.setOnSucceeded {
+            val result = task.value
             if (result.exitCode == 0) {
                 statusLabel.text = "✅ Pull выполнен успешно"
                 refreshStatus()
@@ -228,12 +330,16 @@ class MainWindow : Application() {
                 statusLabel.text = "❌ Pull failed: ${result.stderr}"
             }
         }
+        task.setOnFailed {
+            statusLabel.text = "❌ Pull failed: ${task.exception?.message}"
+        }
+        Thread(task).apply { isDaemon = true }.start()
     }
 }
 
 class LabelFrame(title: String) {
     val root = VBox()
-    
+
     init {
         val titleLabel = Label(title)
         titleLabel.style = "-fx-font-weight: bold; -fx-font-size: 14; -fx-padding: 0 0 5 0;"

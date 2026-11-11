@@ -8,8 +8,10 @@ import javafx.scene.layout.VBox
 
 /**
  * Панель недавних проектов.
+ *
+ * @param onOpen callback при клике на проект
  */
-class RecentProjectsPane {
+class RecentProjectsPane(private val onOpen: (String) -> Unit = {}) {
 
     val root = VBox()
     private val config = Config.load()
@@ -21,6 +23,13 @@ class RecentProjectsPane {
 
         val listView = ListView<String>()
         projects.forEach { listView.items.add("${it.name} (${it.path})") }
+
+        listView.setOnMouseClicked {
+            val index = listView.selectionModel.selectedIndex
+            if (index in projects.indices) {
+                onOpen(projects[index].path)
+            }
+        }
 
         root.children.addAll(titleLabel, listView)
         root.padding = Insets(10.0)

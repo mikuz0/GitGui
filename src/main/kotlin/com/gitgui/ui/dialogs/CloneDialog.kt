@@ -55,7 +55,11 @@ class CloneDialog(private val onCloneSuccess: (String) -> Unit) : Stage() {
 
             val task = object : javafx.concurrent.Task<SystemGit.ProcessResult>() {
                 override fun call(): SystemGit.ProcessResult {
-                    return SystemGit(parent).clone(url, targetDir)
+                    return try {
+                        SystemGit(parent).clone(url, targetDir)
+                    } catch (e: Exception) {
+                        SystemGit.ProcessResult(-1, e.message ?: "Ошибка клонирования")
+                    }
                 }
             }
 
@@ -73,7 +77,7 @@ class CloneDialog(private val onCloneSuccess: (String) -> Unit) : Stage() {
                 alert("Ошибка клонирования", task.exception?.message ?: "Неизвестная ошибка")
             }
 
-            javafx.application.Platform.runLater { task.run() }
+            Thread(task).apply { isDaemon = true }.start()
         }
 
         val buttonBox = HBox(10.0, cloneButton, cancelButton)

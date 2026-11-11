@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="GigaCodeAgentSettings">
+    <option name="autoApproveEdits" value="true" />
+    <option name="autoApprovedCommands">
+      <list>
+        <Execute>
+          <option name="pattern" value="sed -i 's/mainClass.set(&quot;com.gitgui.AppKt&quot;)/mainClass.set(&quot;com.gitgui.core.git.JGitTestKt&quot;)/' /home/mikuz/soft/IdeaProjects/GitGui/build.gradle.kts" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="cd *" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="cat *" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="grep *" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="./gradlew *" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="head *" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="sed -i 's/mainClass.set(&quot;com.gitgui.core.git.JGitTestKt&quot;)/mainClass.set(&quot;com.gitgui.AppKt&quot;)/' /home/mikuz/soft/IdeaProjects/GitGui/build.gradle.kts" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="tail *" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="mkdir -p /home/mikuz/soft/IdeaProjects/GitGui/src/main/kotlin/com/gitgui/ui/widgets /home/mikuz/soft/IdeaProjects/GitGui/src/main/kotlin/com/gitgui/ui/dialogs /home/mikuz/soft/IdeaProjects/GitGui/src/main/resources" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="find *" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="ls *" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="echo *" />
+        </Execute>
+        <Execute>
+          <option name="pattern" value="javap -cp /home/mikuz/soft/IdeaProjects/GitGui/build/classes/kotlin/main com.gitgui.ui.App 2&gt;/dev/null" />
+        </Execute>
+      </list>
+    </option>
+  </component>
+</project>
