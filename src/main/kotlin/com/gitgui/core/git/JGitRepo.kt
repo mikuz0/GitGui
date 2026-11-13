@@ -4,6 +4,7 @@ import com.gitgui.core.models.*
 import org.eclipse.jgit.api.Git
 import org.eclipse.jgit.lib.*
 import org.eclipse.jgit.storage.file.FileRepositoryBuilder
+import org.eclipse.jgit.transport.RemoteConfig
 import java.io.File
 
 /**
@@ -44,6 +45,20 @@ class JGitRepo(private val repoPath: String) {
             git.remoteList().call().map { it.name }
         } catch (_: Exception) {
             emptyList()
+        }
+    }
+
+    /**
+     * Возвращает map: имя remote → URL (первый URI).
+     * Если у remote нет URI — значение пустая строка.
+     */
+    fun getRemoteUrls(): Map<String, String> {
+        return try {
+            git.remoteList().call().associate { remote: RemoteConfig ->
+                remote.name to (remote.getURIs().firstOrNull()?.toString() ?: "")
+            }
+        } catch (_: Exception) {
+            emptyMap()
         }
     }
 

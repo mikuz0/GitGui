@@ -23,6 +23,9 @@ class GitRepo(private val repoPath: String) {
     /** Возвращает список имён удалённых репозиториев */
     fun getRemotes(): List<String> = jgit.getRemotes()
 
+    /** Возвращает map: имя remote → URL */
+    fun getRemoteUrls(): Map<String, String> = jgit.getRemoteUrls()
+
     /** Добавляет файл в индекс */
     fun stageFile(path: String) = jgit.stageFile(path)
 

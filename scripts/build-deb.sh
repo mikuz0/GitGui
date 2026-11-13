@@ -7,7 +7,7 @@ export PATH="$JAVA_HOME/bin:$PATH"
 
 # ─── Конфигурация ─────────────────────────────────────────────────
 APP_NAME="git-gui-jfx"
-APP_VERSION="1.0.0"
+APP_VERSION="1.1.0"
 MAIN_CLASS="com.gitgui.ui.App"
 APP_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 

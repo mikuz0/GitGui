@@ -15,6 +15,7 @@ import javafx.collections.FXCollections
 import javafx.collections.ObservableList
 import javafx.geometry.Insets
 import javafx.geometry.Pos
+import javafx.scene.layout.Priority
 import javafx.scene.Scene
 import javafx.scene.control.*
 import javafx.scene.layout.*
@@ -43,6 +44,8 @@ class MainWindow : Application() {
     private lateinit var pushMenuItem: MenuItem
     private lateinit var pullMenuItem: MenuItem
     private lateinit var recentMenu: Menu
+    private lateinit var pushButton: Button
+    private lateinit var repoInfoPanel: VBox
 
     private val unstagedFiles: ObservableList<FileStatus> = FXCollections.observableArrayList()
     private val stagedFiles: ObservableList<FileStatus> = FXCollections.observableArrayList()
@@ -57,7 +60,7 @@ class MainWindow : Application() {
         statusLabel.style = "-fx-padding: 5; -fx-background-color: #f0f0f0;"
 
         val root = BorderPane()
-        root.top = buildMenuBar()
+        root.top = buildTopArea()
         root.center = buildEmptyContent()
         root.bottom = statusLabel
 
@@ -75,6 +78,14 @@ class MainWindow : Application() {
         if (lastRepo != null && File(lastRepo).exists()) {
             openRepo(lastRepo)
         }
+    }
+
+    private fun buildTopArea(): Region {
+        val menuBar = buildMenuBar()
+        val toolbar = buildToolbar()
+        val vbox = VBox(0.0, menuBar, toolbar)
+        vbox.style = "-fx-background-color: white;"
+        return vbox
     }
 
     private fun buildMenuBar(): MenuBar {
@@ -212,7 +223,15 @@ class MainWindow : Application() {
         val refreshButton = Button("🔄 Обновить")
         refreshButton.setOnAction { refreshStatus() }
 
-        val toolbar = HBox(10.0, openButton, cloneButton, refreshButton)
+        pushButton = Button("📤 Push")
+        pushButton.isDisable = true
+        pushButton.setOnAction { performPush() }
+
+        // Spacer, чтобы Push уехал вправо
+        val spacer = Region()
+        HBox.setHgrow(spacer, Priority.ALWAYS)
+
+        val toolbar = HBox(10.0, openButton, cloneButton, refreshButton, spacer, pushButton)
         toolbar.alignment = Pos.CENTER_LEFT
         toolbar.padding = Insets(10.0)
         return toolbar
@@ -237,7 +256,16 @@ class MainWindow : Application() {
         fileListLeft.stageAllButton.setOnAction { stageAll() }
         fileListRight.unstageButton.setOnAction { unstageSelected() }
 
-        val centerHBox = HBox(10.0, fileListLeft.root, fileListRight.root)
+        // Третья панель — информация о репозитории
+        repoInfoPanel = VBox(5.0)
+        val repoInfoBox = LabelFrame("Репозиторий")
+        repoInfoBox.root.children.add(repoInfoPanel)
+
+        // Все три панели равной ширины
+        val centerHBox = HBox(10.0, fileListLeft.root, fileListRight.root, repoInfoBox.root)
+        HBox.setHgrow(fileListLeft.root, Priority.ALWAYS)
+        HBox.setHgrow(fileListRight.root, Priority.ALWAYS)
+        HBox.setHgrow(repoInfoBox.root, Priority.ALWAYS)
         HBox.setMargin(centerHBox, Insets(10.0))
 
         // Пересоздаём commitArea, чтобы избежать duplicate children
@@ -324,8 +352,40 @@ class MainWindow : Application() {
         updateStatusBar(status)
 
         // Enable/disable push/pull based on remotes
-        pushMenuItem.isDisable = remotes.isEmpty()
-        pullMenuItem.isDisable = remotes.isEmpty()
+        val noRemotes = remotes.isEmpty()
+        pushMenuItem.isDisable = noRemotes
+        pullMenuItem.isDisable = noRemotes
+        pushButton.isDisable = noRemotes
+
+        // Третья панель — информация о репозитории
+        if (::repoInfoPanel.isInitialized) {
+            repoInfoPanel.children.clear()
+
+            // Remote
+            val remoteTitle = Label("Remote:").apply { style = "-fx-font-weight: bold;" }
+            repoInfoPanel.children.add(remoteTitle)
+            val remoteUrls = repo.getRemoteUrls()
+            if (remoteUrls.isEmpty()) {
+                repoInfoPanel.children.add(Label("  (нет)"))
+            } else {
+                remoteUrls.forEach { entry ->
+                    repoInfoPanel.children.add(Label("  ${entry.key} — ${entry.value}").apply {
+                        style = "-fx-wrap-text: true;"
+                        maxWidth = Double.MAX_VALUE
+                    })
+                }
+            }
+
+            // Локальный
+            repoInfoPanel.children.add(Label("Локальный:").apply {
+                style = "-fx-font-weight: bold; -fx-padding: 10 0 0 0;"
+            })
+            repoInfoPanel.children.add(Label("  Путь: ${status.repoPath}").apply {
+                style = "-fx-wrap-text: true;"
+                maxWidth = Double.MAX_VALUE
+            })
+            repoInfoPanel.children.add(Label("  Ветка: ${status.currentBranch ?: "(detached HEAD)"}"))
+        }
     }
 
     private fun updateStatusBar(status: RepoStatus) {
