@@ -226,7 +226,11 @@ MIT
 
 ## Авторы
 
-GitGui Team
+GigaCode
+
+DeepSeek
+
+и Галантерейшик
 
 ---
 

@@ -1,5 +1,6 @@
 package com.gitgui.ui.widgets
 
+import com.gitgui.core.i18n.i18n
 import javafx.geometry.Insets
 import javafx.geometry.Pos
 import javafx.scene.control.Button
@@ -14,12 +15,12 @@ class CommitAreaWidget {
 
     val root = VBox()
     val messageArea: TextArea = TextArea()
-    val commitButton = Button("💾 Сделать коммит")
-    val historyButton = Button("📋 История")
+    val commitButton = Button("commit.button".i18n())
+    val historyButton = Button("commit.history".i18n())
 
     init {
         messageArea.prefRowCount = 4
-        messageArea.promptText = "Сообщение коммита..."
+        messageArea.promptText = "commit.prompt".i18n()
 
         val buttonBox = HBox(10.0, commitButton, historyButton)
         buttonBox.alignment = Pos.CENTER_LEFT

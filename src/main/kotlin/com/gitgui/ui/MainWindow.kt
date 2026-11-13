@@ -3,6 +3,7 @@ package com.gitgui.ui
 import com.gitgui.core.config.Config
 import com.gitgui.core.config.RecentProject
 import com.gitgui.core.git.GitRepo
+import com.gitgui.core.i18n.i18n
 import com.gitgui.core.models.*
 import com.gitgui.ui.dialogs.CloneDialog
 import com.gitgui.ui.dialogs.HistoryDialog
@@ -15,18 +16,19 @@ import javafx.collections.FXCollections
 import javafx.collections.ObservableList
 import javafx.geometry.Insets
 import javafx.geometry.Pos
-import javafx.scene.layout.Priority
 import javafx.scene.Scene
 import javafx.scene.control.*
+import javafx.scene.layout.Priority
 import javafx.scene.layout.*
 import javafx.stage.DirectoryChooser
 import javafx.stage.Stage
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.Paths
+import java.util.Locale
 
 /**
- * Главное окно приложения с MenuBar.
+ * Главное окно приложения с MenuBar и локализацией.
  */
 class MainWindow : Application() {
 
@@ -46,17 +48,20 @@ class MainWindow : Application() {
     private lateinit var recentMenu: Menu
     private lateinit var pushButton: Button
     private lateinit var repoInfoPanel: VBox
+    private lateinit var languageMenu: Menu
+    private lateinit var langRuItem: MenuItem
+    private lateinit var langEnItem: MenuItem
 
     private val unstagedFiles: ObservableList<FileStatus> = FXCollections.observableArrayList()
     private val stagedFiles: ObservableList<FileStatus> = FXCollections.observableArrayList()
 
     override fun start(stage: Stage) {
         currentStage = stage
-        stage.title = "Git GUI"
+        stage.title = "app.title".i18n()
         stage.width = 1000.0
         stage.height = 700.0
 
-        statusLabel = Label("Готов")
+        statusLabel = Label("status.ready".i18n())
         statusLabel.style = "-fx-padding: 5; -fx-background-color: #f0f0f0;"
 
         val root = BorderPane()
@@ -90,17 +95,17 @@ class MainWindow : Application() {
 
     private fun buildMenuBar(): MenuBar {
         // ===== File Menu =====
-        val fileMenu = Menu("_File")
+        val fileMenu = Menu("menu.file".i18n())
 
-        val openButton = MenuItem("_Open Repository...")
+        val openButton = MenuItem("menu.open".i18n())
         openButton.accelerator = getKeyCombination("CONTROL O")
         openButton.setOnAction { openRepositoryDialog() }
 
-        val cloneButton = MenuItem("Cl_one Repository...")
+        val cloneButton = MenuItem("menu.clone".i18n())
         cloneButton.accelerator = getKeyCombination("CONTROL K")
         cloneButton.setOnAction { CloneDialog { path -> openRepo(path) }.show() }
 
-        val closeAction = MenuItem("C_lose")
+        val closeAction = MenuItem("menu.close".i18n())
         closeAction.accelerator = getKeyCombination("CONTROL W")
         closeAction.setOnAction {
             gitRepo?.close()
@@ -110,14 +115,14 @@ class MainWindow : Application() {
             stagedFiles.clear()
             val root = currentStage.scene.root as BorderPane
             root.center = buildEmptyContent()
-            statusLabel.text = "Готов"
+            statusLabel.text = "status.ready".i18n()
         }
 
-        val exitAction = MenuItem("E_xit")
+        val exitAction = MenuItem("menu.exit".i18n())
         exitAction.accelerator = getKeyCombination("CONTROL Q")
         exitAction.setOnAction { currentStage.close() }
 
-        recentMenu = Menu("_Recent Projects")
+        recentMenu = Menu("menu.recent".i18n())
         rebuildRecentMenu()
 
         fileMenu.items.addAll(
@@ -131,28 +136,28 @@ class MainWindow : Application() {
         )
 
         // ===== Git Menu =====
-        val gitMenu = Menu("_Git")
+        val gitMenu = Menu("menu.git".i18n())
 
-        val refreshAction = MenuItem("_Refresh")
+        val refreshAction = MenuItem("menu.refresh".i18n())
         refreshAction.accelerator = getKeyCombination("CONTROL R")
         refreshAction.setOnAction { refreshStatus() }
 
-        val stageAllAction = MenuItem("Stage _All")
+        val stageAllAction = MenuItem("menu.stage_all".i18n())
         stageAllAction.setOnAction { stageAll() }
 
-        val commitAction = MenuItem("_Commit...")
+        val commitAction = MenuItem("menu.commit".i18n())
         commitAction.accelerator = getKeyCombination("CONTROL S")
         commitAction.setOnAction { performCommit() }
 
-        pushMenuItem = MenuItem("_Push")
+        pushMenuItem = MenuItem("menu.push".i18n())
         pushMenuItem.setDisable(true)
         pushMenuItem.setOnAction { performPush() }
 
-        pullMenuItem = MenuItem("_Pull")
+        pullMenuItem = MenuItem("menu.pull".i18n())
         pullMenuItem.setDisable(true)
         pullMenuItem.setOnAction { performPull() }
 
-        val fetchAction = MenuItem("_Fetch")
+        val fetchAction = MenuItem("menu.fetch".i18n())
         fetchAction.setOnAction { performFetch() }
 
         gitMenu.items.addAll(
@@ -165,20 +170,61 @@ class MainWindow : Application() {
             fetchAction
         )
 
-        // ===== Help Menu =====
-        val helpMenu = Menu("_Help")
+        // ===== Language Menu =====
+        languageMenu = Menu("")
+        rebuildLanguageMenu()
 
-        val aboutAction = MenuItem("_About")
+        // ===== Help Menu =====
+        val helpMenu = Menu("menu.help".i18n())
+
+        val aboutAction = MenuItem("menu.about".i18n())
         aboutAction.setOnAction { showAbout() }
 
         helpMenu.items.add(aboutAction)
 
         // ===== MenuBar =====
         val menuBar = MenuBar()
-        menuBar.menus.addAll(fileMenu, gitMenu, helpMenu)
-        // MenuBar handles shortcuts via accelerators
+        menuBar.menus.addAll(fileMenu, gitMenu, languageMenu, helpMenu)
 
         return menuBar
+    }
+
+    private fun rebuildLanguageMenu() {
+        languageMenu.text = "menu.language".i18n()
+        languageMenu.items.clear()
+
+        langRuItem = MenuItem("menu.language.ru".i18n())
+        langRuItem.setOnAction { changeLanguage(Locale("ru")) }
+
+        langEnItem = MenuItem("menu.language.en".i18n())
+        langEnItem.setOnAction { changeLanguage(Locale.ENGLISH) }
+
+        // Check current language and add radio indicator
+        val isRu = !com.gitgui.core.i18n.LocaleManager.isEnglish()
+        langRuItem.text = if (isRu) "☑ ${"menu.language.ru".i18n()}" else "☐ ${"menu.language.ru".i18n()}"
+        langEnItem.text = if (!isRu) "☑ ${"menu.language.en".i18n()}" else "☐ ${"menu.language.en".i18n()}"
+
+        languageMenu.items.addAll(langRuItem, langEnItem)
+    }
+
+    private fun changeLanguage(locale: Locale) {
+        com.gitgui.core.i18n.LocaleManager.setLocale(locale)
+        rebuildLanguageMenu()
+        rebuildAllUI()
+    }
+
+    private fun rebuildAllUI() {
+        val root = currentStage.scene.root as BorderPane
+        root.top = buildTopArea()
+        
+        if (gitRepo != null) {
+            root.center = buildRepoContent()
+            refreshStatus()
+        } else {
+            root.center = buildEmptyContent()
+        }
+        
+        statusLabel.text = "status.ready".i18n()
     }
 
     private fun rebuildRecentMenu() {
@@ -189,7 +235,7 @@ class MainWindow : Application() {
             .filter { Files.exists(Paths.get(it.path)) }
 
         if (validProjects.isEmpty()) {
-            val emptyItem = MenuItem("(нет недавних проектов)")
+            val emptyItem = MenuItem("menu.recent.empty".i18n())
             emptyItem.isDisable = true
             recentMenu.items.add(emptyItem)
             return
@@ -214,16 +260,16 @@ class MainWindow : Application() {
     }
 
     private fun buildToolbar(): Region {
-        val openButton = Button("📂 Открыть репозиторий")
+        val openButton = Button("toolbar.open".i18n())
         openButton.setOnAction { openRepositoryDialog() }
 
-        val cloneButton = Button("📥 Клонировать")
+        val cloneButton = Button("toolbar.clone".i18n())
         cloneButton.setOnAction { CloneDialog { path -> openRepo(path) }.show() }
 
-        val refreshButton = Button("🔄 Обновить")
+        val refreshButton = Button("toolbar.refresh".i18n())
         refreshButton.setOnAction { refreshStatus() }
 
-        pushButton = Button("📤 Push")
+        pushButton = Button("toolbar.push".i18n())
         pushButton.isDisable = true
         pushButton.setOnAction { performPush() }
 
@@ -238,18 +284,18 @@ class MainWindow : Application() {
     }
 
     private fun buildRepoContent(): Region {
-        val infoBox = LabelFrame("Информация")
-        infoRepoLabel = Label("Репозиторий: ")
-        infoBranchLabel = Label("Ветка: ")
-        infoRemotesLabel = Label("Удаленные: ")
+        val infoBox = LabelFrame("info.panel".i18n())
+        infoRepoLabel = Label("info.repo".i18n())
+        infoBranchLabel = Label("info.branch".i18n())
+        infoRemotesLabel = Label("info.remotes".i18n())
 
         val infoVBox = VBox(5.0, infoRepoLabel, infoBranchLabel, infoRemotesLabel)
         infoVBox.alignment = Pos.CENTER_LEFT
         infoBox.root.children.add(infoVBox)
 
         // Создаём виджеты с FileListMode
-        fileListLeft = FileListWidget("Изменённые файлы", unstagedFiles, FileListMode.CHANGED)
-        fileListRight = FileListWidget("Проиндексировано (staged)", stagedFiles, FileListMode.STAGED)
+        fileListLeft = FileListWidget("filelist.changed".i18n(), unstagedFiles, FileListMode.CHANGED)
+        fileListRight = FileListWidget("filelist.staged".i18n(), stagedFiles, FileListMode.STAGED)
 
         // Привязываем обработчики к кнопкам
         fileListLeft.stageButton.setOnAction { stageSelected() }
@@ -258,7 +304,7 @@ class MainWindow : Application() {
 
         // Третья панель — информация о репозитории
         repoInfoPanel = VBox(5.0)
-        val repoInfoBox = LabelFrame("Репозиторий")
+        val repoInfoBox = LabelFrame("repoinfo.panel".i18n())
         repoInfoBox.root.children.add(repoInfoPanel)
 
         // Все три панели равной ширины
@@ -273,7 +319,7 @@ class MainWindow : Application() {
         commitArea.commitButton.setOnAction { performCommit() }
         commitArea.historyButton.setOnAction { showHistory() }
 
-        val commitBox = LabelFrame("Сообщение коммита")
+        val commitBox = LabelFrame("commit.panel".i18n())
         commitBox.root.children.add(commitArea.root)
 
         return VBox(10.0, infoBox.root, centerHBox, commitBox.root)
@@ -288,7 +334,7 @@ class MainWindow : Application() {
 
     private fun openRepositoryDialog() {
         val chooser = DirectoryChooser()
-        chooser.title = "Открыть репозиторий"
+        chooser.title = "dialog.clone".i18n()
         chooser.initialDirectory = getStartDirectory()
 
         val dir = chooser.showDialog(currentStage) ?: return
@@ -331,16 +377,16 @@ class MainWindow : Application() {
         val status = try {
             repo.refreshStatus()
         } catch (e: Exception) {
-            statusLabel.text = "❌ Ошибка чтения статуса: ${e.message}"
+            statusLabel.text = "msg.status_error".i18n() + e.message
             return
         }
 
         val remotes = repo.getRemotes()
-        val remoteText = if (remotes.isEmpty()) "нет" else remotes.joinToString(", ")
+        val remoteText = if (remotes.isEmpty()) "info.none".i18n() else remotes.joinToString(", ")
 
-        infoRepoLabel.text = "Репозиторий: ${status.repoPath}"
-        infoBranchLabel.text = "Ветка: ${status.currentBranch ?: "(detached HEAD)"}"
-        infoRemotesLabel.text = "Удаленные: $remoteText"
+        infoRepoLabel.text = "info.repo".i18n() + status.repoPath
+        infoBranchLabel.text = "info.branch".i18n() + (status.currentBranch ?: "(detached HEAD)")
+        infoRemotesLabel.text = "info.remotes".i18n() + remoteText
 
         unstagedFiles.clear()
         unstagedFiles.addAll(
@@ -362,11 +408,11 @@ class MainWindow : Application() {
             repoInfoPanel.children.clear()
 
             // Remote
-            val remoteTitle = Label("Remote:").apply { style = "-fx-font-weight: bold;" }
+            val remoteTitle = Label("repoinfo.remote".i18n()).apply { style = "-fx-font-weight: bold;" }
             repoInfoPanel.children.add(remoteTitle)
             val remoteUrls = repo.getRemoteUrls()
             if (remoteUrls.isEmpty()) {
-                repoInfoPanel.children.add(Label("  (нет)"))
+                repoInfoPanel.children.add(Label("  info.none".i18n()))
             } else {
                 remoteUrls.forEach { entry ->
                     repoInfoPanel.children.add(Label("  ${entry.key} — ${entry.value}").apply {
@@ -377,14 +423,14 @@ class MainWindow : Application() {
             }
 
             // Локальный
-            repoInfoPanel.children.add(Label("Локальный:").apply {
+            repoInfoPanel.children.add(Label("repoinfo.local".i18n()).apply {
                 style = "-fx-font-weight: bold; -fx-padding: 10 0 0 0;"
             })
-            repoInfoPanel.children.add(Label("  Путь: ${status.repoPath}").apply {
+            repoInfoPanel.children.add(Label("repoinfo.path".i18n() + status.repoPath).apply {
                 style = "-fx-wrap-text: true;"
                 maxWidth = Double.MAX_VALUE
             })
-            repoInfoPanel.children.add(Label("  Ветка: ${status.currentBranch ?: "(detached HEAD)"}"))
+            repoInfoPanel.children.add(Label("repoinfo.branch".i18n() + (status.currentBranch ?: "(detached HEAD)")))
         }
     }
 
@@ -394,9 +440,9 @@ class MainWindow : Application() {
         val deleted = status.deletedFiles.size
 
         statusLabel.text = when {
-            changed == 0 && staged == 0 -> "Готов"
-            deleted > 0 -> "⚠️ Удалено файлов: $deleted | Изменено: $changed, Проиндексировано: $staged"
-            else -> "Изменено: $changed, Проиндексировано: $staged"
+            changed == 0 && staged == 0 -> "status.ready".i18n()
+            deleted > 0 -> "status.deleted".i18n() + deleted + "status.changed".i18n() + changed + "status.staged".i18n() + staged
+            else -> "status.changed_only".i18n() + changed + "status.staged_only".i18n() + staged
         }
     }
 
@@ -404,15 +450,15 @@ class MainWindow : Application() {
         val repo = gitRepo ?: return
         val selected = fileListLeft.listView.selectionModel.selectedItems
         if (selected.isEmpty()) {
-            statusLabel.text = "⚠️ Выберите файлы для добавления"
+            statusLabel.text = "msg.select_files".i18n()
             return
         }
         try {
             selected.forEach { repo.stageFile(it.path) }
             refreshStatus()
-            statusLabel.text = "✅ Добавлено в индекс: ${selected.size}"
+            statusLabel.text = "msg.staged".i18n() + selected.size
         } catch (e: Exception) {
-            statusLabel.text = "❌ Ошибка stage: ${e.message}"
+            statusLabel.text = "msg.stage_error".i18n() + e.message
         }
     }
 
@@ -423,9 +469,9 @@ class MainWindow : Application() {
         try {
             all.forEach { repo.stageFile(it.path) }
             refreshStatus()
-            statusLabel.text = "✅ Все файлы добавлены в индекс"
+            statusLabel.text = "msg.staged_all".i18n()
         } catch (e: Exception) {
-            statusLabel.text = "❌ Ошибка stage all: ${e.message}"
+            statusLabel.text = "msg.stage_all_error".i18n() + e.message
         }
     }
 
@@ -433,15 +479,15 @@ class MainWindow : Application() {
         val repo = gitRepo ?: return
         val selected = fileListRight.listView.selectionModel.selectedItems
         if (selected.isEmpty()) {
-            statusLabel.text = "⚠️ Выберите файлы для отмены индексации"
+            statusLabel.text = "msg.select_unstage".i18n()
             return
         }
         try {
             selected.forEach { repo.unstageFile(it.path) }
             refreshStatus()
-            statusLabel.text = "✅ Убрано из индекса: ${selected.size}"
+            statusLabel.text = "msg.unstaged".i18n() + selected.size
         } catch (e: Exception) {
-            statusLabel.text = "❌ Ошибка unstage: ${e.message}"
+            statusLabel.text = "msg.unstage_error".i18n() + e.message
         }
     }
 
@@ -453,7 +499,7 @@ class MainWindow : Application() {
                 initOwner(currentStage)
             }.show()
         } catch (e: Exception) {
-            statusLabel.text = "❌ Ошибка истории: ${e.message}"
+            statusLabel.text = "msg.history_error".i18n() + e.message
         }
     }
 
@@ -461,7 +507,7 @@ class MainWindow : Application() {
         val repo = gitRepo ?: return
         val message = commitArea.messageArea.text.trim()
         if (message.isEmpty()) {
-            statusLabel.text = "⚠️ Сообщение коммита не может быть пустым"
+            statusLabel.text = "msg.commit_empty".i18n()
             return
         }
 
@@ -473,13 +519,13 @@ class MainWindow : Application() {
             if (sha != null) {
                 commitArea.messageArea.text = ""
                 refreshStatus()
-                statusLabel.text = "✅ Коммит создан: ${sha.take(7)}"
+                statusLabel.text = "msg.committed".i18n() + sha.take(7)
             } else {
-                statusLabel.text = "⚠️ Нет изменений для коммита"
+                statusLabel.text = "msg.no_changes".i18n()
             }
         }
         task.setOnFailed {
-            statusLabel.text = "❌ Ошибка коммита: ${task.exception?.message}"
+            statusLabel.text = "msg.commit_error".i18n() + task.exception?.message
         }
         Thread(task).apply { isDaemon = true }.start()
     }
@@ -493,13 +539,13 @@ class MainWindow : Application() {
         task.setOnSucceeded {
             val result = task.value
             if (result.exitCode == 0) {
-                statusLabel.text = "✅ Push выполнен успешно"
+                statusLabel.text = "msg.push_success".i18n()
             } else {
-                statusLabel.text = "❌ Push failed: ${result.stderr}"
+                statusLabel.text = "msg.push_error".i18n() + result.stderr
             }
         }
         task.setOnFailed {
-            statusLabel.text = "❌ Push failed: ${task.exception?.message}"
+            statusLabel.text = "msg.push_error".i18n() + task.exception?.message
         }
         Thread(task).apply { isDaemon = true }.start()
     }
@@ -513,14 +559,14 @@ class MainWindow : Application() {
         task.setOnSucceeded {
             val result = task.value
             if (result.exitCode == 0) {
-                statusLabel.text = "✅ Pull выполнен успешно"
+                statusLabel.text = "msg.pull_success".i18n()
                 refreshStatus()
             } else {
-                statusLabel.text = "❌ Pull failed: ${result.stderr}"
+                statusLabel.text = "msg.pull_error".i18n() + result.stderr
             }
         }
         task.setOnFailed {
-            statusLabel.text = "❌ Pull failed: ${task.exception?.message}"
+            statusLabel.text = "msg.pull_error".i18n() + task.exception?.message
         }
         Thread(task).apply { isDaemon = true }.start()
     }
@@ -529,7 +575,7 @@ class MainWindow : Application() {
         val repo = gitRepo ?: return
         val remotes = repo.getRemotes()
         if (remotes.isEmpty()) {
-            statusLabel.text = "⚠️ Нет удалённых репозиториев"
+            statusLabel.text = "msg.no_remotes".i18n()
             return
         }
 
@@ -539,28 +585,22 @@ class MainWindow : Application() {
         task.setOnSucceeded {
             val result = task.value
             if (result.exitCode == 0) {
-                statusLabel.text = "✅ Fetch выполнен успешно"
+                statusLabel.text = "msg.fetch_success".i18n()
             } else {
-                statusLabel.text = "❌ Fetch failed: ${result.stderr}"
+                statusLabel.text = "msg.fetch_error".i18n() + result.stderr
             }
         }
         task.setOnFailed {
-            statusLabel.text = "❌ Fetch failed: ${task.exception?.message}"
+            statusLabel.text = "msg.fetch_error".i18n() + task.exception?.message
         }
         Thread(task).apply { isDaemon = true }.start()
     }
 
     private fun showAbout() {
         val alert = Alert(Alert.AlertType.INFORMATION)
-        alert.title = "О программе Git GUI"
-        alert.headerText = "Git GUI v1.0.0"
-        alert.contentText = "Десктопное приложение для работы с Git.\n\n" +
-                "Ключевые возможности:\n" +
-                "• Визуальный просмотр изменений\n" +
-                "• Управление индексом\n" +
-                "• История коммитов\n" +
-                "• Push/Pull/Fetch через системный git\n" +
-                "• Недавние проекты"
+        alert.title = "about.title".i18n()
+        alert.headerText = "about.header".i18n()
+        alert.contentText = "about.content".i18n()
         alert.showAndWait()
     }
 }

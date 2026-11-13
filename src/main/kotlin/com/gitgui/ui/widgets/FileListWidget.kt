@@ -1,5 +1,6 @@
 package com.gitgui.ui.widgets
 
+import com.gitgui.core.i18n.i18n
 import com.gitgui.core.models.FileStatus
 import com.gitgui.core.models.FileStatusType
 import javafx.collections.ObservableList
@@ -38,9 +39,9 @@ class FileListWidget(
 
     val root = VBox()
     val listView: ListView<FileStatus> = ListView(files)
-    val stageButton = Button("✓ Stage выбранные")
-    val stageAllButton = Button("✓ Stage все")
-    val unstageButton = Button("↩️ Unstage выбранные")
+    val stageButton = Button("filelist.stage_selected".i18n())
+    val stageAllButton = Button("filelist.stage_all".i18n())
+    val unstageButton = Button("filelist.unstage_selected".i18n())
 
     init {
         // Настраиваем cellFactory для отображения иконок и цветов
@@ -53,7 +54,7 @@ class FileListWidget(
                         style = ""
                         return
                     }
-                    val suffix = if (item.statusType == FileStatusType.DELETED) " [УДАЛЕН]" else ""
+                    val suffix = if (item.statusType == FileStatusType.DELETED) "filelist.deleted_suffix".i18n() else ""
                     text = "${item.statusType.emoji} ${item.path}$suffix"
                     style = "-fx-text-fill: ${item.statusType.colorHex};"
                 }

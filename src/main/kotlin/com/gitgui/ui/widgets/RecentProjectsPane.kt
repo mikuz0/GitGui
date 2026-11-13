@@ -1,6 +1,7 @@
 package com.gitgui.ui.widgets
 
 import com.gitgui.core.config.Config
+import com.gitgui.core.i18n.i18n
 import javafx.geometry.Insets
 import javafx.scene.control.Label
 import javafx.scene.control.ListView
@@ -18,7 +19,7 @@ class RecentProjectsPane(private val onOpen: (String) -> Unit = {}) {
     private val projects = config.recentProjects
 
     init {
-        val titleLabel = Label("Недавние проекты")
+        val titleLabel = Label("recent.title".i18n())
         titleLabel.style = "-fx-font-weight: bold; -fx-font-size: 16;"
 
         val listView = ListView<String>()

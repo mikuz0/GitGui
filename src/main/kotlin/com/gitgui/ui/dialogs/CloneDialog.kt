@@ -1,6 +1,7 @@
 package com.gitgui.ui.dialogs
 
 import com.gitgui.core.git.SystemGit
+import com.gitgui.core.i18n.i18n
 import javafx.geometry.Insets
 import javafx.geometry.Pos
 import javafx.scene.Scene
@@ -15,18 +16,18 @@ import javafx.stage.Stage
 class CloneDialog(private val onCloneSuccess: (String) -> Unit) : Stage() {
 
     init {
-        title = "Клонировать репозиторий"
+        title = "dialog.clone".i18n()
         width = 500.0
         height = 300.0
 
-        val urlLabel = Label("URL репозитория:")
-        val urlField = TextField("https://github.com/")
+        val urlLabel = Label("dialog.url".i18n())
+        val urlField = TextField("dialog.url.default".i18n())
         urlField.prefWidth = 400.0
 
-        val parentLabel = Label("Родительская папка:")
+        val parentLabel = Label("dialog.parent".i18n())
         val parentField = TextField(System.getProperty("user.home"))
         parentField.prefWidth = 300.0
-        val browseButton = Button("Обзор")
+        val browseButton = Button("dialog.browse".i18n())
 
         val folderLabel = Label()
         folderLabel.style = "-fx-text-fill: #2196F3;"
@@ -39,11 +40,11 @@ class CloneDialog(private val onCloneSuccess: (String) -> Unit) : Stage() {
                 .split("/")
                 .lastOrNull() ?: "repo"
             val parent = parentField.text.toString()
-            folderLabel.text = "📁 Будет создана папка: $parent/$repoName"
+            folderLabel.text = "dialog.folder".i18n() + "$parent/$repoName"
         }
 
-        val cloneButton = Button("Клонировать")
-        val cancelButton = Button("Отмена")
+        val cloneButton = Button("dialog.clone_btn".i18n())
+        val cancelButton = Button("dialog.cancel".i18n())
 
         cancelButton.setOnAction { close() }
 
@@ -58,7 +59,7 @@ class CloneDialog(private val onCloneSuccess: (String) -> Unit) : Stage() {
                     return try {
                         SystemGit(parent).clone(url, targetDir)
                     } catch (e: Exception) {
-                        SystemGit.ProcessResult(-1, e.message ?: "Ошибка клонирования")
+                        SystemGit.ProcessResult(-1, e.message ?: "dialog.clone_failed".i18n())
                     }
                 }
             }
@@ -69,12 +70,12 @@ class CloneDialog(private val onCloneSuccess: (String) -> Unit) : Stage() {
                     onCloneSuccess(targetDir)
                     close()
                 } else {
-                    alert("Ошибка клонирования", result.stderr)
+                    alert("dialog.clone_error".i18n(), result.stderr)
                 }
             }
 
             task.setOnFailed {
-                alert("Ошибка клонирования", task.exception?.message ?: "Неизвестная ошибка")
+                alert("dialog.clone_error".i18n(), task.exception?.message ?: "dialog.unknown_error".i18n())
             }
 
             Thread(task).apply { isDaemon = true }.start()
